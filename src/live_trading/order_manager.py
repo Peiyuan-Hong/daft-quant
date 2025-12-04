@@ -75,13 +75,13 @@ class OrderManager:
         self.xt_trader.cancel_order_stock_async(self.acc, order_id)
         self.logger.info(f"Cancelled Order: {order_id}")
 
-    def get_positions(self) -> List[xttype.StockPosition]:
+    def get_positions(self):
         """
         Get current positions.
         """
         return self.xt_trader.query_stock_positions(self.acc)
 
-    def get_asset(self) -> xttype.StockAsset:
+    def get_asset(self):
         """
         Get account assets (Cash, Market Value).
         """
