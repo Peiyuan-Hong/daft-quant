@@ -1,5 +1,6 @@
 import time
 import logging
+import traceback
 from typing import Dict, Any, List, Optional
 import pandas as pd
 from datetime import datetime
@@ -126,43 +127,82 @@ class LiveTradeEngine:
         """
         Callback when new market data arrives.
         Format data and pass to strategy.
+        
+        xtquant data format for bar subscription (e.g., '5m'):
+        {
+            'stock_code': [
+                [timestamp, open, high, low, close, volume, amount, ...],
+                ...
+            ]
+        }
+        
+        For tick subscription:
+        {
+            'stock_code': { 'time': ..., 'lastPrice': ..., ... }
+        }
         """
-        # Check for valid data
-        # xtdata callback format varies by version, usually returns a dict of {stock: data}
-        # or if subscribed individually, might differ.
-        
-        # In recent xtquant, subscribe_quote callback receives data dict.
-        # Example: { '000001.SZ': { 'time': ..., 'lastPrice': ..., ... } }
-        
         for symbol, tick_data in data.items():
             if symbol not in self.symbols:
                 continue
-                
-            # Convert to Bar format expected by BaseStrategy
-            # BaseStrategy expects: datetime, open, high, low, close, volume
             
-            # If 'period' is 1d, we might get snapshot data.
-            # For real-time, we usually get 'lastPrice', 'open', 'high', 'low', 'volume' (accumulated)
-            
-            current_price = tick_data.get('lastPrice')
-            if not current_price:
-                continue
-                
-            bar = {
-                'datetime': datetime.fromtimestamp(tick_data.get('time', time.time()) / 1000),
-                'open': tick_data.get('open'),
-                'high': tick_data.get('high'),
-                'low': tick_data.get('low'),
-                'close': current_price,
-                'volume': tick_data.get('volume')
-            }
-            
-            # Pass to Strategy
             try:
+                # Skip invalid data (xtquant sometimes returns 0 or None)
+                if tick_data is None or tick_data == 0 or tick_data == []:
+                    self.logger.debug(f"Skipping empty/invalid data for {symbol}: {tick_data}")
+                    continue
+                
+                # Handle bar data (list format) - for period subscriptions like '5m', '1d'
+                if isinstance(tick_data, list):
+                    if len(tick_data) == 0:
+                        continue
+                    
+                    # Get the latest bar (last element)
+                    latest_bar = tick_data[-1]
+                    
+                    # Bar format: [timestamp, open, high, low, close, volume, amount, ...]
+                    if len(latest_bar) < 6:
+                        self.logger.warning(f"Invalid bar data length for {symbol}: {len(latest_bar)}")
+                        continue
+                    
+                    timestamp = latest_bar[0]
+                    bar = {
+                        'datetime': datetime.fromtimestamp(timestamp / 1000) if timestamp > 1e10 else datetime.fromtimestamp(timestamp),
+                        'open': float(latest_bar[1]),
+                        'high': float(latest_bar[2]),
+                        'low': float(latest_bar[3]),
+                        'close': float(latest_bar[4]),
+                        'volume': float(latest_bar[5])
+                    }
+                    current_price = bar['close']
+                    
+                    self.logger.info(f"Bar: {symbol} @ {bar['datetime']} | O:{bar['open']:.3f} H:{bar['high']:.3f} L:{bar['low']:.3f} C:{bar['close']:.3f} V:{bar['volume']:.0f}")
+                
+                # Handle tick data (dict format)
+                elif isinstance(tick_data, dict):
+                    current_price = tick_data.get('lastPrice')
+                    if not current_price:
+                        continue
+                    
+                    bar = {
+                        'datetime': datetime.fromtimestamp(tick_data.get('time', time.time() * 1000) / 1000),
+                        'open': tick_data.get('open'),
+                        'high': tick_data.get('high'),
+                        'low': tick_data.get('low'),
+                        'close': current_price,
+                        'volume': tick_data.get('volume')
+                    }
+                else:
+                    self.logger.warning(f"Unknown data format for {symbol}: type={type(tick_data)}, value={tick_data}")
+                    continue
+                
+                # Pass to Strategy
                 signal = self.strategy.on_bar(bar)
                 self._handle_signal(symbol, signal, current_price)
+                
             except Exception as e:
                 self.logger.error(f"Strategy execution error for {symbol}: {e}")
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                self.logger.error(f"Raw data received: {tick_data}")
 
     def _handle_signal(self, symbol: str, signal: Any, price: float):
         """

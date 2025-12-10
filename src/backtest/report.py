@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from typing import Dict, Any, Optional
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
@@ -67,6 +68,7 @@ class BacktestReport:
             self._save_equity_curve(report_dir, history, strategy_name, symbol)
             self._save_drawdown_chart(report_dir, history, strategy_name, symbol)
             self._save_price_chart_with_trades(report_dir, data, all_trades, strategy_name, symbol)
+            self._save_trade_pnl_chart(report_dir, trades_df, strategy_name, symbol)
             self._save_metrics_summary_chart(report_dir, metrics, strategy_name, symbol)
             
             print(f"Report saved to: {report_dir}")
@@ -258,6 +260,55 @@ class BacktestReport:
         
         plt.tight_layout()
         plt.savefig(os.path.join(report_dir, "price_with_trades.png"), dpi=150)
+        plt.close()
+    
+    def _save_trade_pnl_chart(
+        self,
+        report_dir: str,
+        trades_df: pd.DataFrame,
+        strategy_name: str,
+        symbol: str
+    ):
+        """Save per-trade PnL scatter chart (blue=win, red=loss)."""
+        if trades_df is None or trades_df.empty:
+            return
+        
+        if 'pnl' not in trades_df.columns:
+            return
+        
+        fig, ax = plt.subplots(figsize=(12, 5))
+        
+        # Get datetime (prefer column, fall back to index)
+        if 'datetime' in trades_df.columns:
+            x = pd.to_datetime(trades_df['datetime'])
+        else:
+            x = trades_df.index
+        
+        pnl = trades_df['pnl']
+        colors = np.where(pnl >= 0, 'blue', 'red')
+        
+        ax.scatter(x, pnl, c=colors, s=40, alpha=0.7, edgecolors='none')
+        ax.axhline(0, color='gray', linestyle='--', linewidth=1)
+        
+        ax.set_title(f"Per-Trade PnL - {symbol} ({strategy_name})", fontsize=14, fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('PnL')
+        ax.grid(True, alpha=0.3)
+        
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        ax.xaxis.set_major_locator(mdates.YearLocator())
+        plt.xticks(rotation=45)
+        
+        # Add legend
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='blue', markersize=8, label='Win'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=8, label='Loss')
+        ]
+        ax.legend(handles=legend_elements, loc='upper left')
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(report_dir, 'trade_pnl.png'), dpi=150)
         plt.close()
     
     def _save_metrics_summary_chart(self, report_dir: str, metrics: Dict, strategy_name: str, symbol: str):

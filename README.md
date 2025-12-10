@@ -22,6 +22,7 @@ This project is a comprehensive quantitative trading system designed to handle t
 - **Implemented Strategies:**
   - Moving Average Crossover (`MACrossoverStrategy`)
   - RSI Strategy (`RSIStrategy`)
+  - Dollar Cost Averaging (`DCAStrategy`)
 - **Compatibility:** Same strategy code runs in Backtest and Live Trading.
 
 ### ✅ 3. Backtest Module
@@ -31,22 +32,37 @@ This project is a comprehensive quantitative trading system designed to handle t
   - **A-Share Rules:** Enforced **T+1** trading logic.
   - **Costs:** Configurable commission, stamp duty (sell-side), and slippage.
   - **Batch Processing:** `BacktestRunner` allows testing multiple stocks/ETFs in one go.
-  - **Reporting:** Comprehensive metrics (Sharpe, Drawdown, Win Rate) and visualizations.
+  - **Reporting:** `BacktestReport` generates text summaries and charts (equity curve, drawdown, trade markers).
 
-### 🚧 4. Live Trading Interface
-**Status:** Planned
-- Will connect strategy signals to Mini-QMT execution API.
-- Real-time order management and position monitoring.
+### ✅ 4. Live Trading Interface
+**Implementation:** `src/live_trading/`
+- **Engine:** `LiveTradeEngine` connects strategy signals to Mini-QMT execution API.
+- **Features:**
+  - Real-time market data subscription (bar/tick).
+  - Async order placement via `OrderManager`.
+  - Position and asset monitoring.
+  - Structured logging for audit trail.
+
+### ✅ 5. Risk Management
+**Implementation:** `src/risk/`
+- **Position Sizing:** `PositionSizer` with configurable methods.
+  - `all_in`: Use ~99% of available cash.
+  - `fixed_fraction`: Allocate a fraction of cash per trade.
+  - `fixed_cash`: Allocate a fixed amount per trade.
+- **Config:** Minimum cash reserve, lot size (100 shares for A-shares).
 
 ## Project Structure
 ```
 daft-quant/
 ├── src/
-│   ├── backtest/       # Backtest engine and runner
+│   ├── backtest/       # Backtest engine, runner, reporting, plotting
 │   ├── data/           # Data fetching and storage logic
-│   └── strategy/       # Strategy logic (MA, RSI, etc.)
+│   ├── live_trading/   # Live trading engine and order management
+│   ├── risk/           # Position sizing and risk management
+│   └── strategy/       # Strategy logic (MA, RSI, DCA, etc.)
 ├── storage/
 │   └── data/           # Cached market data (CSV)
+├── backtest_reports/   # Generated backtest reports (timestamped)
 ├── run_analysis.py     # Script to run batch backtests
 ├── main.py             # Data fetching demo
 └── README.md
